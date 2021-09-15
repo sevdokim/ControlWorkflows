@@ -3,14 +3,6 @@ defaults:
   ###############################
   # Basic Configuration Panel
   ###############################
-  ctp_global_run_enabled: !public
-    value: "false"
-    type: bool
-    label: "CTP Global Run"
-    description: "Enable/disable CTP Global Run"
-    widget: checkBox
-    panel: CTPConfiguration
-    index: -200
   dcs_enabled: !public # TODO: if false, DCS panel should be disabled
     value: "false"
     type: bool
@@ -615,6 +607,31 @@ defaults:
     description: "additional parameters for the DCS EOR"
     widget: editBox
     panel: DCS
+  ###############################
+  # CTP Panel
+  ###############################
+  ctp_global_run_enabled: !public
+    value: "false"
+    type: bool
+    label: "CTP Global Run"
+    description: "Enable/disable CTP Global Run"
+    widget: checkBox
+    panel: CTP
+    index: -200  
+  ctp_load_parameters: !public
+    value: ""
+    type: string
+    label: "CTP Global Config File"
+    description: "config file for the CTP Global Run Load"
+    widget: editBox
+    panel: CTP
+  ctp_run_parameters: !public
+    value: ""
+    type: string
+    label: "CTP Start Run Config"
+    description: "config for the CTP Run Start"
+    widget: editBox
+    panel: CTP
   ###############################
   # Cleanup Operations Panel
   ###############################      
