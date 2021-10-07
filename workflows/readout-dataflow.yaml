@@ -49,6 +49,7 @@ defaults:
       - cpv-compressor
       - cpv-qc-compressor
       - cpv-pedestal-calib-qc
+      - cpv-filereader-py8hi
       - minimal-dpl
       - qc-daq
       - qcmn-daq-local
