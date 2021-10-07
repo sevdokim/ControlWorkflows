@@ -63,7 +63,7 @@ command:
     - "--clone"
     - "''"
     - "--dataspec"
-    - "'dd:FLP/DISTSUBTIMEFRAME/0'"
+    - "'x0:CPV/RAWDATA;dd:FLP/DISTSUBTIMEFRAME/0'"
     - "--fairmq-ipc-prefix"
     - "'/tmp'"
     - "--fairmq-rate-logging"
