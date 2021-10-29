@@ -1,22 +1,27 @@
-name: cpv-physics-qcmn-epn-remote-internal-dpl-clock
+name: phos-raw-clusters-local-readout-proxy
 defaults:
   log_task_output: none
   _module_cmdline: >-
     source /etc/profile.d/modules.sh && MODULEPATH={{ modulepath }} module load O2 QualityControl Control-OCCPlugin &&
-    {{ dpl_command }} | o2-qc
-  _plain_cmdline: "source /etc/profile.d/o2.sh && {{ dpl_command }} | o2-qc"
+    {{ dpl_command }} | o2-dpl-raw-proxy
+  _plain_cmdline: "source /etc/profile.d/o2.sh && {{ dpl_command }} | o2-dpl-raw-proxy"
 control:
   mode: "fairmq"
 wants:
   cpu: 0.01
   memory: 1
 bind:
-  - name: from_internal-dpl-clock_to_PhysicsOnEPNs-proxy
+  - name: from_readout-proxy_to_PHOSRawToCellConverterSpec_t0
     type: push
     transport: shmem
     addressing: ipc
     rateLogging: "{{ fmq_rate_logging }}"
-  - name: from_internal-dpl-clock_to_MERGER-PhysicsOnEPNs1l-0
+  - name: from_readout-proxy_to_PHOSRawToCellConverterSpec_t1
+    type: push
+    transport: shmem
+    addressing: ipc
+    rateLogging: "{{ fmq_rate_logging }}"
+  - name: from_readout-proxy_to_PHOSRawToCellConverterSpec_t2
     type: push
     transport: shmem
     addressing: ipc
@@ -46,7 +51,7 @@ command:
     - "--resources-monitoring"
     - "'{{ resources_monitoring }}'"
     - "--id"
-    - "'internal-dpl-clock'"
+    - "'readout-proxy'"
     - "--shm-monitor"
     - "'false'"
     - "--log-color"
@@ -67,8 +72,8 @@ command:
     - "''"
     - "--clone"
     - "''"
-    - "--config"
-    - "'{{ qc_config_uri }}'"
+    - "--dataspec"
+    - "'x:PHS/RAWDATA;dd:FLP/DISTSUBTIMEFRAME/0'"
     - "--early-forward-policy"
     - "'never'"
     - "--fairmq-ipc-prefix"
@@ -83,19 +88,14 @@ command:
     - "'drop'"
     - "--forwarding-policy"
     - "'dangling'"
-    - "--host"
-    - "''"
     - "--labels"
-    - "''"
-    - "--local-batch"
     - "''"
     - "--pipeline"
     - "''"
+    - "--proxy-name"
+    - "'readout-proxy'"
     - "--readers"
     - "'1'"
-    - "--remote"
-    - "--remote-batch"
-    - "''"
     - "--severity"
     - "'info'"
     - "--shm-mlock-segment"
