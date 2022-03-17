@@ -3,6 +3,14 @@ defaults:
   ###############################
   # General Configuration Panel
   ###############################
+  ctp_readout_enabled: #!public
+    value: "false"
+    type: bool
+    label: "CTP Readout"
+    description: "Enable/disable CTP readout"
+    widget: checkBox
+    panel: General_Configuration
+    index: -300
   dcs_enabled: !public # TODO: if false, DCS panel should be disabled
     value: "false"
     type: bool
@@ -44,14 +52,6 @@ defaults:
     panel: General_Configuration
     visibleif: $$trg_enabled === "true"
     index: 4
-  ccdb_enabled: !public
-    value: "false"
-    type: bool
-    label: "CCDB/GRP"
-    description: "Enable/disable CCDB GRP object upload"
-    widget: checkBox
-    panel: General_Configuration
-    index: 5
   ###############################
   # DCS and FLP Workflows Panel
   ###############################
@@ -650,6 +650,11 @@ defaults:
     values:
       - none
       - qcmn-daq-remote
+      - trd-full-qcmn-epn
+      - trd-full-qcmn-norawdatastats-epn
+      - trd-full-qcmn-nodigits-epn
+      - trd-full-qcmn-notracklets-epn
+      - trd-full-qcmn-nopulseheight-epn
   trd_dcs_sor_parameters: !public
     value: "{}"
     type: string
@@ -1105,6 +1110,17 @@ defaults:
     index: 900
     visibleif: $$pdp_panel_mode === "Expert"
   ###############################
+  # CTP readout Panel
+  ###############################
+  ctp_readout_host: #!public
+    value: "alio2-cr1-flp163"
+    type: string
+    label: "CTP Readout host"
+    description: "Defines the host that runs CTP readout"
+    widget: editBox
+    panel: "CTP_Readout"
+    index: 0
+  ###############################
   # Timeouts
   ###############################
   ccdb_start_timeout: "10s"
@@ -1130,6 +1146,7 @@ defaults:
   trg_ctp_emulator_timeout: "10s"
   trg_load_timeout: "5s"
   trg_start_timeout: "5s"
+  trg_pre_start_timeout: "5s"
   trg_stop_timeout: "5s"
   trg_unload_timeout: "5s"
   trg_cleanup_timeout: "5s"
@@ -1144,6 +1161,7 @@ defaults:
   ###############################
   # Other variables
   ###############################    
+  ccdb_enabled: "false"
   dpl_workflow: none
   dpl_command: none
   drop_caches_enabled: "true"
@@ -1168,6 +1186,79 @@ vars:
   ddsched_enabled: "{{ epn_enabled == 'true' && dd_enabled == 'true' }}"
   odc_enabled: "{{ epn_enabled }}"
 roles:
+  ##################
+  # CTP Readout role
+  ##################
+  - name: "readout-ctp"
+    enabled: "{{ ctp_readout_enabled == 'true' }}"
+    vars:
+      detector: "{{ctp_readout_enabled == 'true' ? DetectorForHost( ctp_readout_host ) : \"\" }}"
+      readout_cfg_uri_standalone: "consul-ini://{{ consul_endpoint }}/o2/components/readout/ANY/any/readout-standalone-{{ ctp_readout_host }}"
+      readout_cfg_uri_stfb: "consul-ini://{{ consul_endpoint }}/o2/components/readout/ANY/any/readout-stfb-{{ ctp_readout_host }}"
+      dd_discovery_ib_hostname: "{{ ctp_readout_host }}-ib" # MUST be defined for all stfb and stfs
+    constraints:
+      - attribute: machine_id
+        value:  "{{ ctp_readout_host }}"
+    roles:
+      - name: "readout"
+        vars:
+          readout_cfg_uri: '{{dd_enabled == "true" ? readout_cfg_uri_stfb : readout_cfg_uri_standalone}}'
+        task:
+          load: readout
+      - name: "data-distribution"
+        enabled: "{{ dd_enabled == 'true' }}"
+        roles:
+          - name: "stfb"
+            vars:
+              dd_discovery_stfb_id: stfb-{{ ctp_readout_host }}-{{ NewID() }} # must be defined for all stfb roles
+            connect:
+              - name: readout
+                type: pull
+                target: "{{ Up(2).Path }}.readout:readout"
+                rateLogging: "{{ fmq_rate_logging }}"
+            task:
+              load: stfbuilder-senderoutput
+          - name: "stfs"
+            vars:
+              dd_discovery_stfs_id: stfs-{{ ctp_readout_host }}-{{ NewID() }} # must be defined for all stfs roles
+              stfs_input_channel_name: buildertosender
+            connect:
+              - name: buildertosender
+                type: pull
+                target: "{{ Parent().Path }}.stfb:buildertosender"
+                rateLogging: "{{ fmq_rate_logging }}"
+            task:
+              load: stfsender
+      - name: drop-caches
+        enabled: "{{drop_caches_enabled == 'true'}}"
+        vars:
+          shell_command: echo 3 > /proc/sys/vm/drop_caches && echo "system caches dropped" | O2_SYSTEM=ECS O2_PARTITION={{environment_id}} O2_ROLE={{it}} {{o2_infologger_path}}/bin/o2-infologger-log -x -s Info -o Facility=core/dropcaches
+          user: root
+        task:
+          load: "shell-command"
+          trigger: before_CONFIGURE
+          timeout: "{{ drop_caches_timeout }}"
+          critical: false # TODO: if this is set true, some basic task finished events aren't parsed correctly
+      - name: fairmq-shmcleanup
+        enabled: "{{fmq_initial_shm_cleanup_enabled == 'true'}}"
+        vars:
+          shell_command: "source /etc/profile.d/o2.sh && O2_PARTITION={{environment_id}} O2_ROLE={{it}} o2-aliecs-shmcleaner"
+          user: root
+        task:
+          load: "shell-command"
+          trigger: before_CONFIGURE
+          timeout: "{{ fmq_initial_shm_cleanup_timeout }}"
+          critical: false
+      - name: fairmq-shmmonitor
+        enabled: "{{fmq_cleanup_enabled == 'true'}}"
+        task:
+          load: "fairmq-shmmonitor"
+          trigger: DESTROY
+          timeout: 10s
+          critical: false
+  ##################
+  # CTP Readout role
+  ##################
   - name: host-{{ it }}
     for:
       range: "{{ hosts }}"
@@ -1412,13 +1503,13 @@ roles:
       - name: sor
         call:
           func: dcs.StartOfRun()
-          trigger: enter_RUNNING
+          trigger: before_START_ACTIVITY
           timeout: "{{ dcs_sor_timeout }}"
           critical: true
       - name: eor
         call:
           func: dcs.EndOfRun()
-          trigger: leave_RUNNING
+          trigger: after_STOP_ACTIVITY
           timeout: "{{ dcs_eor_timeout }}"
           critical: true
       - name: cleanup
@@ -1532,6 +1623,12 @@ roles:
           trigger: enter_RUNNING
           timeout: "{{ trg_load_timeout }}"
           critical: true
+      - name: pre-start
+        call:
+          func: testplugin.Noop()
+          trigger: after_START_ACTIVITY-200
+          timeout: "{{ trg_pre_start_timeout }}"
+          critical: false
       - name: start
         call:
           func: trg.RunStart()
